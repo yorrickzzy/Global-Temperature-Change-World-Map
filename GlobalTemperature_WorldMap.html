@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="CSS/main.css">
+    <script type="text/javascript" src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/d3-simple-slider@2.0.0/dist/d3-simple-slider.min.js"></script>
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/topojson-client@3"></script>
+    <title>Final Project</title>
+</head>
+<body>
+    <a href="../combined.html">Go back to Main Page</a>
+    <h2>World temperature (July)</h2>
+    <div id="map"></div>
+    
+    <script type="text/javascript">
+        const width = 900;
+        const height = 600;
+
+        const svg = d3.select('body')
+            .append('svg')
+            .attr('width', width)
+            .attr('height', height);
+
+        const projection = d3.geoMercator()
+            .scale(140)
+            .translate([width / 2, height / 1.4]);
+
+        const path = d3.geoPath().projection(projection);
+
+        const colorScale = d3.scaleSequential(d3.interpolateReds)
+            .domain([0, 40]); 
+
+        let currentYear = 2024; 
+
+        Promise.all([
+            d3.json('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json'),
+            d3.csv('month 7 all.csv') 
+        ]).then(([worldData, temperatureData]) => {
+            const countries = topojson.feature(worldData, worldData.objects.countries).features;
+
+            const temperatureMap = {};
+            temperatureData.forEach(d => {
+                const code = d.Code; 
+                temperatureMap[code] = {
+                    2014: +d['2014'],
+                    2015: +d['2015'],
+                    2016: +d['2016'],
+                    2017: +d['2017'],
+                    2018: +d['2018'],
+                    2019: +d['2019'],
+                    2020: +d['2020'],
+                    2021: +d['2021'],
+                    2022: +d['2022'],
+                    2023: +d['2023'],
+                    2024: +d['2024']
+                };
+            });
+
+            function updateMap() {
+                console.log("Updating map for year:", currentYear); 
+                svg.selectAll('path')
+                    .attr('fill', d => {
+                        const temperature = temperatureMap[d.id] ? temperatureMap[d.id][currentYear] : undefined;
+                        return temperature !== undefined ? colorScale(temperature) : '#ccc';
+                    });
+            }
+
+            svg.append('g').selectAll('path')
+                .data(countries)
+                .enter()
+                .append('path')
+                .attr('class', 'country')
+                .attr('d', path)
+                .attr('fill', d => {
+                    const temperature = temperatureMap[d.id] ? temperatureMap[d.id][currentYear] : undefined;
+                    return temperature !== undefined ? colorScale(temperature) : '#ccc';
+                })
+                .on('mouseover', function(event, d) {
+                    const countryName = d.properties.name;
+                    const temperature = temperatureMap[d.id] ? temperatureMap[d.id][currentYear] : undefined;
+                    d3.select(this)
+                        .attr('stroke-width', 1.5);
+                    d3.select('body').append('div')
+                        .attr('class', 'tooltip')
+                        .style('left', `${event.pageX + 5}px`)
+                        .style('top', `${event.pageY + 5}px`)
+                        .html(`${countryName}: ${temperature !== undefined ? temperature + '°C' : 'No data'}`);
+                })
+                .on('mouseout', function() {
+                    d3.select(this)
+                        .attr('stroke-width', 0.5);
+                    d3.select('.tooltip').remove();
+                });
+
+            const slider = d3.sliderBottom()
+                .min(2014) 
+                .max(2024) 
+                .step(1) 
+                .width(300) 
+                .default(currentYear) 
+                .on('onchange', year => {
+                    currentYear = year;
+                    updateMap(); 
+                });
+
+            const gSlider = svg.append('g')
+                    .attr('transform', `translate(${width - 330}, 20)`); 
+            gSlider.call(slider);
+
+            const legendWidth = 300;  
+            const legendHeight = 10;  
+
+            const legendX = d3.scaleLinear()
+                .domain(colorScale.domain())
+                .range([0, legendWidth]);
+
+            const legendAxis = d3.axisBottom(legendX)
+                .ticks(5)
+                .tickFormat(d => `${d}°C`);
+
+            const defs = svg.append('defs');
+            const linearGradient = defs.append('linearGradient')
+                .attr('id', 'linear-gradient');
+
+            linearGradient.selectAll('stop')
+                .data(colorScale.ticks().map((t, i, n) => ({
+                    offset: `${100 * i / n.length}%`,
+                    color: colorScale(t)
+                })))
+                .enter()
+                .append('stop')
+                .attr('offset', d => d.offset)
+                .attr('stop-color', d => d.color);
+
+            svg.append('g')
+                .attr('transform', `translate(${(width - legendWidth) / 2}, ${height - 30})`) 
+                .append('rect')
+                .attr('width', legendWidth)
+                .attr('height', legendHeight)
+                .style('fill', 'url(#linear-gradient)');
+
+            svg.append('g')
+                .attr('class', 'axis')
+                .attr('transform', `translate(${(width - legendWidth) / 2}, ${height - 20})`)  
+                .call(legendAxis);
+
+        }).catch(error => {
+            console.error('Error loading data:', error);
+        });
+    </script>  
+</body>
+</html>
